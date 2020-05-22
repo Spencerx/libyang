@@ -37,6 +37,7 @@
 #include "tree.h"
 #include "tree_schema.h"
 #include "tree_schema_internal.h"
+#include "parser_internal.h"
 
 API const struct lysc_node *
 lys_getnext(const struct lysc_node *last, const struct lysc_node *parent, const struct lysc_module *module, int options)

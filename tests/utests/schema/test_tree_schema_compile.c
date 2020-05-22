@@ -20,10 +20,11 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "../../src/common.h"
-#include "../../src/tree_schema_internal.h"
-#include "../../src/xpath.h"
-#include "../../src/plugins_types.h"
+#include "../../../src/common.h"
+#include "../../../src/tree_schema_internal.h"
+#include "../../../src/parser_internal.h"
+#include "../../../src/xpath.h"
+#include "../../../src/plugins_types.h"
 
 void lysc_feature_free(struct ly_ctx *ctx, struct lysc_feature *feat);
 void yang_parser_ctx_free(struct lys_yang_parser_ctx *ctx);
