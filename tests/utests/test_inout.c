@@ -235,6 +235,225 @@ test_input_read(void **state)
     *state = NULL;
 }
 
+static void
+test_output_mem(void **state)
+{
+    struct ly_out *out = NULL;
+    char *buf1 = NULL, *buf2 = NULL;
+
+    *state = test_output_mem;
+
+    /* manipulate with the handler */
+    assert_non_null(out = ly_out_new_memory(&buf1, 0));
+    assert_int_equal(LY_OUT_MEMORY, ly_out_type(out));
+    ly_write(out, "test", 4);
+    assert_ptr_equal(buf1, ly_out_memory(out, &buf2, 0));
+    assert_ptr_equal(buf2, ly_out_memory(out, NULL, 0));
+    assert_ptr_equal(buf2, ly_out_memory(out, &buf1, strlen(buf1)));
+    ly_out_free(out, NULL, 0);
+
+    assert_non_null(out = ly_out_new_memory(&buf1, strlen(buf1)));
+    ly_out_free(out, NULL, 1);
+
+    /* writing data */
+
+    assert_non_null(out = ly_out_new_memory(&buf1, 0));
+    assert_int_equal(10, ly_print(out, "test %s", "print"));
+    assert_string_equal("test print", buf1);
+    assert_int_equal(LY_SUCCESS, ly_out_reset(out));
+    assert_int_equal(8, ly_write(out, "rewrite", 8));
+    assert_string_equal("rewrite", buf1);
+    ly_out_free(out, NULL, 1);
+
+    /* cleanup */
+    *state = NULL;
+}
+
+static void
+test_output_fd(void **state)
+{
+    struct ly_out *out = NULL;
+    int fd1, fd2;
+    char buf[31] = {0};
+    const char *filepath = "/tmp/libyang_test_output";
+
+    *state = test_output_fd;
+
+    assert_int_not_equal(-1, fd1 = open(filepath, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR));
+    assert_int_not_equal(-1, fd2 = open(filepath, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR));
+
+    /* manipulate with the handler */
+    assert_non_null(out = ly_out_new_fd(fd1));
+    assert_int_equal(LY_OUT_FD, ly_out_type(out));
+    assert_ptr_equal(fd1, ly_out_fd(out, fd2));
+    assert_ptr_equal(fd2, ly_out_fd(out, -1));
+    assert_ptr_equal(fd2, ly_out_fd(out, fd1));
+    ly_out_free(out, NULL, 0);
+    assert_int_equal(0, close(fd2));
+    assert_non_null(out = ly_out_new_fd(fd1));
+    ly_out_free(out, NULL, 1);
+
+    /* writing data */
+    assert_int_not_equal(-1, fd1 = open(filepath, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR));
+    assert_int_not_equal(-1, fd2 = open(filepath, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR));
+    /* truncate file to start with no data */
+    assert_int_equal(0, ftruncate(fd1, 0));
+
+    assert_non_null(out = ly_out_new_fd(fd1));
+    assert_int_equal(10, ly_print(out, "test %s", "print"));
+    ly_print_flush(out);
+    assert_int_equal(10, read(fd2, buf, 30));
+    assert_string_equal("test print", buf);
+    assert_int_equal(0, lseek(fd2, 0, SEEK_SET));
+    assert_int_equal(LY_SUCCESS, ly_out_reset(out));
+
+    assert_int_equal(8, ly_write(out, "rewrite", 8));
+    ly_print_flush(out);
+    assert_int_equal(8, read(fd2, buf, 30));
+    assert_string_equal("rewrite", buf);
+
+    close(fd2);
+    ly_out_free(out, NULL, 1);
+
+    /* cleanup */
+    *state = NULL;
+}
+
+static void
+test_output_file(void **state)
+{
+    struct ly_out *out = NULL;
+    FILE *f1, *f2;
+    char buf[31] = {0};
+    const char *filepath = "/tmp/libyang_test_output";
+
+    *state = test_output_file;
+
+    assert_int_not_equal(-1, f1 = fopen(filepath, "w"));
+    assert_int_not_equal(-1, f2 = fopen(filepath, "w"));
+
+    /* manipulate with the handler */
+    assert_non_null(out = ly_out_new_file(f1));
+    assert_int_equal(LY_OUT_FILE, ly_out_type(out));
+    assert_ptr_equal(f1, ly_out_file(out, f2));
+    assert_ptr_equal(f2, ly_out_file(out, NULL));
+    assert_ptr_equal(f2, ly_out_file(out, f1));
+    ly_out_free(out, NULL, 0);
+    assert_int_equal(0, fclose(f2));
+    assert_non_null(out = ly_out_new_file(f1));
+    ly_out_free(out, NULL, 1);
+
+    /* writing data */
+    assert_int_not_equal(-1, f1 = fopen(filepath, "w"));
+    assert_int_not_equal(-1, f2 = fopen(filepath, "r"));
+
+    assert_non_null(out = ly_out_new_file(f1));
+    assert_int_equal(10, ly_print(out, "test %s", "print"));
+    ly_print_flush(out);
+    assert_non_null(fgets(buf, 31, f2));
+    assert_string_equal("test print", buf);
+    assert_int_equal(0, fseek(f2, 0, SEEK_SET));
+    assert_int_equal(LY_SUCCESS, ly_out_reset(out));
+
+    assert_int_equal(8, ly_write(out, "rewrite", 8));
+    ly_print_flush(out);
+    assert_non_null(fgets(buf, 31, f2));
+    assert_string_equal("rewrite", buf);
+
+    fclose(f2);
+    ly_out_free(out, NULL, 1);
+
+    /* cleanup */
+    *state = NULL;
+}
+
+static void
+test_output_filepath(void **state)
+{
+    struct ly_out *out = NULL;
+    FILE *f1;
+    char buf[31] = {0};
+    const char *fp1 = "/tmp/libyang_test_output";
+    const char *fp2 = "/tmp/libyang_test_output2";
+
+    *state = test_output_filepath;
+
+    /* manipulate with the handler */
+    assert_non_null(out = ly_out_new_filepath(fp1));
+    assert_int_equal(LY_OUT_FILEPATH, ly_out_type(out));
+    assert_ptr_equal(NULL, ly_out_filepath(out, fp2));
+    assert_string_equal(fp2, ly_out_filepath(out, NULL));
+    assert_ptr_equal(NULL, ly_out_filepath(out, fp1));
+    ly_out_free(out, NULL, 0);
+    assert_non_null(out = ly_out_new_filepath(fp1));
+    ly_out_free(out, NULL, 1);
+
+    /* writing data */
+    assert_int_not_equal(-1, f1 = fopen(fp1, "r"));
+
+    assert_non_null(out = ly_out_new_filepath(fp1));
+    assert_int_equal(10, ly_print(out, "test %s", "print"));
+    ly_print_flush(out);
+    assert_non_null(fgets(buf, 31, f1));
+    assert_string_equal("test print", buf);
+    assert_int_equal(0, fseek(f1, 0, SEEK_SET));
+    assert_int_equal(LY_SUCCESS, ly_out_reset(out));
+
+    assert_int_equal(8, ly_write(out, "rewrite", 8));
+    ly_print_flush(out);
+    assert_non_null(fgets(buf, 31, f1));
+    assert_string_equal("rewrite", buf);
+
+    fclose(f1);
+    ly_out_free(out, NULL, 1);
+
+    /* cleanup */
+    *state = NULL;
+}
+
+static void
+test_output_clb(void **state)
+{
+    struct ly_out *out = NULL;
+    int fd1, fd2;
+    char buf[31] = {0};
+    const char *filepath = "/tmp/libyang_test_output";
+
+    *state = test_output_clb;
+
+    assert_int_not_equal(-1, fd1 = open(filepath, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR));
+    assert_int_not_equal(-1, fd2 = open(filepath, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR));
+
+    /* manipulate with the handler */
+    assert_non_null(out = ly_out_new_clb((ssize_t (*)(void *, const void *, size_t))write, (void*)(intptr_t)fd1));
+    assert_int_equal(LY_OUT_CALLBACK, ly_out_type(out));
+    assert_ptr_equal(fd1, ly_out_clb_arg(out, (void*)(intptr_t)fd2));
+    assert_ptr_equal(fd2, ly_out_clb_arg(out, NULL));
+    assert_ptr_equal(fd2, ly_out_clb_arg(out, (void*)(intptr_t)fd1));
+    assert_ptr_equal(write, ly_out_clb(out, (ssize_t (*)(void *, const void *, size_t))write));
+    ly_out_free(out, NULL, 0);
+    assert_int_equal(0, close(fd2));
+    assert_non_null(out = ly_out_new_clb((ssize_t (*)(void *, const void *, size_t))write, (void*)(intptr_t)fd1));
+    ly_out_free(out, (void (*)(void *))close, 0);
+
+    /* writing data */
+    assert_int_not_equal(-1, fd1 = open(filepath, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR));
+    assert_int_not_equal(-1, fd2 = open(filepath, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR));
+    /* truncate file to start with no data */
+    assert_int_equal(0, ftruncate(fd1, 0));
+
+    assert_non_null(out = ly_out_new_clb((ssize_t (*)(void *, const void *, size_t))write, (void*)(intptr_t)fd1));
+    assert_int_equal(10, ly_print(out, "test %s", "print"));
+    assert_int_equal(10, read(fd2, buf, 30));
+    assert_string_equal("test print", buf);
+
+    close(fd2);
+    ly_out_free(out, (void (*)(void *))close, 0);
+
+    /* cleanup */
+    *state = NULL;
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -243,6 +462,11 @@ int main(void)
         cmocka_unit_test_setup_teardown(test_input_file, logger_setup, logger_teardown),
         cmocka_unit_test_setup_teardown(test_input_filepath, logger_setup, logger_teardown),
         cmocka_unit_test_setup_teardown(test_input_read, logger_setup, logger_teardown),
+        cmocka_unit_test_setup_teardown(test_output_mem, logger_setup, logger_teardown),
+        cmocka_unit_test_setup_teardown(test_output_fd, logger_setup, logger_teardown),
+        cmocka_unit_test_setup_teardown(test_output_file, logger_setup, logger_teardown),
+        cmocka_unit_test_setup_teardown(test_output_filepath, logger_setup, logger_teardown),
+        cmocka_unit_test_setup_teardown(test_output_clb, logger_setup, logger_teardown),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);
