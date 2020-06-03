@@ -31,7 +31,6 @@
 #include "dict.h"
 #include "hash_table.h"
 #include "log.h"
-#include "plugins_exts.h"
 #include "set.h"
 #include "tree.h"
 #include "tree_schema.h"

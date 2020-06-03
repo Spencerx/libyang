@@ -33,7 +33,6 @@
 #include "log.h"
 #include "set.h"
 #include "xpath.h"
-#include "plugins_exts.h"
 #include "tree.h"
 #include "tree_schema.h"
 #include "tree_schema_internal.h"

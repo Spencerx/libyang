@@ -21,18 +21,18 @@
 extern "C" {
 #endif
 
-#include "log.h"
-#include "set.h"
-#include "dict.h"
 #include "context.h"
-#include "tree.h"
-#include "tree_data.h"
-#include "tree_schema.h"
+#include "dict.h"
+#include "log.h"
+#include "parser.h"
+#include "plugins_types.h"
 #include "printer.h"
 #include "printer_data.h"
 #include "printer_schema.h"
-#include "printer_data.h"
-#include "plugins_types.h"
+#include "set.h"
+#include "tree.h"
+#include "tree_data.h"
+#include "tree_schema.h"
 
 /**
  * @mainpage About

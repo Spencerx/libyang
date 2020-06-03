@@ -19,6 +19,10 @@
 
 #include "tree_schema.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct ly_out;
 
 /**
@@ -66,5 +70,9 @@ ssize_t lys_print(struct ly_out *out, const struct lys_module *module, LYS_OUTFO
 ssize_t lys_print_node(struct ly_out *out, const struct lysc_node *node, LYS_OUTFORMAT format, int line_length, int options);
 
 /** @} schematree */
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* LY_PRINTER_SCHEMA_H_ */

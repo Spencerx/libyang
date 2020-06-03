@@ -19,6 +19,10 @@
 
 #include "tree_data.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct ly_out;
 
 /**
@@ -61,5 +65,9 @@ struct ly_out;
  * @return Negative value failure (absolute value corresponds to LY_ERR values).
  */
 ssize_t lyd_print(struct ly_out *out, const struct lyd_node *root, LYD_FORMAT format, int options);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* LY_PRINTER_DATA_H_ */
