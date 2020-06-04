@@ -12,10 +12,11 @@
  *     https://opensource.org/licenses/BSD-3-Clause
  */
 
-#define _POSIX_C_SOURCE 200809L
+#define _GNU_SOURCE
 
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -64,7 +65,7 @@ ly_in_fd(struct ly_in *in, int fd)
 {
     int prev_fd;
     size_t length;
-    char *addr;
+    const char *addr;
 
     LY_CHECK_ARG_RET(NULL, in, in->type == LY_IN_FD, -1);
 
@@ -77,7 +78,7 @@ ly_in_fd(struct ly_in *in, int fd)
             return -1;
         }
 
-        ly_munmap(in->start, in->length);
+        ly_munmap((char*)in->start, in->length);
 
         in->method.fd = fd;
         in->current = in->start = addr;
@@ -132,7 +133,7 @@ ly_in_file(struct ly_in *in, FILE *f)
 }
 
 API struct ly_in *
-ly_in_new_memory(char *str)
+ly_in_new_memory(const char *str)
 {
     struct ly_in *in;
 
@@ -147,10 +148,10 @@ ly_in_new_memory(char *str)
     return in;
 }
 
-char *
-ly_in_memory(struct ly_in *in, char *str)
+const char *
+ly_in_memory(struct ly_in *in, const char *str)
 {
-    char *data;
+    const char *data;
 
     LY_CHECK_ARG_RET(NULL, in, in->type == LY_IN_MEMORY, NULL);
 
@@ -173,31 +174,39 @@ ly_in_reset(struct ly_in *in)
 }
 
 API struct ly_in *
-ly_in_new_filepath(const char *filepath)
+ly_in_new_filepath(const char *filepath, size_t len)
 {
     struct ly_in *in;
+    char *fp;
     int fd;
 
     LY_CHECK_ARG_RET(NULL, filepath, NULL);
 
-    fd = open(filepath, O_RDONLY);
-    LY_CHECK_ERR_RET(!fd, LOGERR(NULL, LY_ESYS, "Failed to open file \"%s\" (%s).", filepath, strerror(errno)), NULL);
+    if (len) {
+        fp = strndup(filepath, len);
+    } else {
+        fp = strdup(filepath);
+    }
+
+    fd = open(fp, O_RDONLY);
+    LY_CHECK_ERR_RET(!fd, LOGERR(NULL, LY_ESYS, "Failed to open file \"%s\" (%s).", fp, strerror(errno)); free(fp), NULL);
 
     in = ly_in_new_fd(fd);
-    LY_CHECK_RET(!in, NULL);
+    LY_CHECK_ERR_RET(!in, free(fp), NULL);
 
     /* convert the LY_IN_FD input handler into the LY_IN_FILE */
     in->type = LY_IN_FILEPATH;
     in->method.fpath.fd = fd;
-    in->method.fpath.filepath = strdup(filepath);
+    in->method.fpath.filepath = fp;
 
     return in;
 }
 
 API const char *
-ly_in_filepath(struct ly_in *in, const char *filepath)
+ly_in_filepath(struct ly_in *in, const char *filepath, size_t len)
 {
     int fd, prev_fd;
+    char *fp = NULL;
 
     LY_CHECK_ARG_RET(NULL, in, in->type == LY_IN_FILEPATH, filepath ? NULL : ((void *)-1));
 
@@ -205,23 +214,75 @@ ly_in_filepath(struct ly_in *in, const char *filepath)
         return in->method.fpath.filepath;
     }
 
+    if (len) {
+        fp = strndup(filepath, len);
+    } else {
+        fp = strdup(filepath);
+    }
+
     /* replace filepath */
-    fd = open(filepath, O_RDONLY);
-    LY_CHECK_ERR_RET(!fd, LOGERR(NULL, LY_ESYS, "Failed to open file \"%s\" (%s).", filepath, strerror(errno)), NULL);
+    fd = open(fp, O_RDONLY);
+    LY_CHECK_ERR_RET(!fd, LOGERR(NULL, LY_ESYS, "Failed to open file \"%s\" (%s).", fp, strerror(errno)); free(fp), NULL);
 
     /* convert LY_IN_FILEPATH handler into LY_IN_FD to be able to update it via ly_in_fd() */
     in->type = LY_IN_FD;
     prev_fd = ly_in_fd(in, fd);
-    LY_CHECK_ERR_RET(prev_fd == -1, in->type = LY_IN_FILEPATH, NULL);
+    LY_CHECK_ERR_RET(prev_fd == -1, in->type = LY_IN_FILEPATH; free(fp), NULL);
 
     /* and convert the result back */
     in->type = LY_IN_FILEPATH;
     close(prev_fd);
     free(in->method.fpath.filepath);
     in->method.fpath.fd = fd;
-    in->method.fpath.filepath = strdup(filepath);
+    in->method.fpath.filepath = fp;
 
     return NULL;
+}
+
+void
+lys_parser_fill_filepath(struct ly_ctx *ctx, struct ly_in *in, const char **filepath)
+{
+    char path[PATH_MAX];
+    char proc_path[32];
+    int len;
+
+    LY_CHECK_ARG_RET(NULL, ctx, in, filepath, );
+    if (*filepath) {
+        /* filepath already set */
+        return;
+    }
+
+    switch (in->type) {
+    case LY_IN_FILEPATH:
+        if (realpath(in->method.fpath.filepath, path) != NULL) {
+            *filepath = lydict_insert(ctx, path, 0);
+        } else {
+            *filepath = lydict_insert(ctx, in->method.fpath.filepath, 0);
+        }
+
+        break;
+    case LY_IN_FD:
+#ifdef __APPLE__
+        if (fcntl(fd, F_GETPATH, path) != -1) {
+            mod->filepath = lydict_insert(ctx, path, 0);
+        }
+#else
+        /* get URI if there is /proc */
+        sprintf(proc_path, "/proc/self/fd/%d", in->method.fd);
+        if ((len = readlink(proc_path, path, PATH_MAX - 1)) > 0) {
+            *filepath = lydict_insert(ctx, path, len);
+        }
+#endif
+        break;
+    case LY_IN_MEMORY:
+    case LY_IN_FILE:
+        /* nothing to do */
+        break;
+    default:
+        LOGINT(ctx);
+        break;
+    }
+
 }
 
 API void
@@ -236,9 +297,9 @@ ly_in_free(struct ly_in *in, int destroy)
 
     if (destroy) {
         if (in->type == LY_IN_MEMORY) {
-            free(in->start);
+            free((char*)in->start);
         } else {
-            ly_munmap(in->start, in->length);
+            ly_munmap((char*)in->start, in->length);
 
             if (in->type == LY_IN_FILE) {
                 fclose(in->method.f);
@@ -251,7 +312,7 @@ ly_in_free(struct ly_in *in, int destroy)
             }
         }
     } else if (in->type != LY_IN_MEMORY) {
-        ly_munmap(in->start, in->length);
+        ly_munmap((char*)in->start, in->length);
 
         if (in->type == LY_IN_FILEPATH) {
             close(in->method.fpath.fd);
@@ -284,7 +345,7 @@ ly_read(struct ly_in *in, void *buf, ssize_t count)
     }
 
     for (i = 0; i < count; i++) {
-        char *c = &in->current[i * direction];
+        const char *c = &in->current[i * direction];
         if ((direction > 0 && *c == '\0') || (direction < 0 && c == in->start)) {
             break;
         }

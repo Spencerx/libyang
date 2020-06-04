@@ -339,12 +339,13 @@ LY_ERR lysp_load_submodule(struct lys_parser_ctx *pctx, struct lysp_module *mod,
 /**
  * @brief Compile printable schema into a validated schema linking all the references.
  *
- * @param[in, out] mod Schema structure holding pointers to both schema structure types. The ::lys_module#parsed
+ * @param[in, out] mod Pointer to the schema structure holding pointers to both schema structure types. The ::lys_module#parsed
  * member is used as input and ::lys_module#compiled is used to hold the result of the compilation.
+ * If the compilation fails, the whole module is removed from context, freed and @p mod is set to NULL!
  * @param[in] options Various options to modify compiler behavior, see [compile flags](@ref scflags).
  * @return LY_ERR value - LY_SUCCESS or LY_EVALID.
  */
-LY_ERR lys_compile(struct lys_module *mod, int options);
+LY_ERR lys_compile(struct lys_module **mod, int options);
 
 /**
  * @brief Get address of a node's actions list if any.
@@ -555,81 +556,13 @@ struct lysp_submodule *lys_parse_mem_submodule(struct ly_ctx *ctx, const char *d
                                                lys_custom_check custom_check, void *check_data);
 
 /**
- * @brief Parse module or submodule from a file descriptor.
+ * @brief Fill filepath value if available in input handler @p in
  *
- * The modules are added into the context, submodules not. The latest_revision flag is updated in both cases.
- *
- * \note Current implementation supports only reading data from standard (disk) file, not from sockets, pipes, etc.
- *
- * @param[in] ctx libyang context where to process the data model.
- * @param[in] fd File descriptor of a regular file (e.g. sockets are not supported) containing the schema
- *            in the specified format.
- * @param[in] format Format of the input data (YANG or YIN).
- * @param[in] implement Flag if the schema is supposed to be marked as implemented.
- * @param[in] main_ctx Parser context of the main module in case of parsing submodule. This flag decides if the module
- * or submodule was expected to be parsed.
- * @param[in] custom_check Callback to check the parsed schema before it is accepted.
- * @param[in] check_data Caller's data to pass to the custom_check callback.
- * @return Pointer to the data model structure or NULL on error.
+ * @param[in] ctx Context with dictionary where the filepath value will be stored.
+ * @param[in] in Input handler to examine (filepath is not available for all the input types).
+ * @param[out] filepath Address of the variable where the filepath is stored.
  */
-void *lys_parse_fd_(struct ly_ctx *ctx, int fd, LYS_INFORMAT format, int implement, struct lys_parser_ctx *main_ctx,
-                    lys_custom_check custom_check, void *check_data);
-
-/**
- * @brief Parse YANG module from a file descriptor.
- *
- * The modules are added into the context. The latest_revision flag is updated.
- *
- * \note Current implementation supports only reading data from standard (disk) file, not from sockets, pipes, etc.
- *
- * @param[in] ctx libyang context where to process the data model.
- * @param[in] fd File descriptor of a regular file (e.g. sockets are not supported) containing the schema
- *            in the specified format.
- * @param[in] format Format of the input data (YANG or YIN).
- * @param[in] implement Flag if the schema is supposed to be marked as implemented.
- * @param[in] custom_check Callback to check the parsed schema before it is accepted.
- * @param[in] check_data Caller's data to pass to the custom_check callback.
- * @return Pointer to the data model structure or NULL on error.
- */
-struct lys_module *lys_parse_fd_module(struct ly_ctx *ctx, int fd, LYS_INFORMAT format, int implement,
-                                       lys_custom_check custom_check, void *check_data);
-
-/**
- * @brief Parse submodule from a file descriptor.
- *
- * The latest_revision flag of submodules is updated.
- *
- * \note Current implementation supports only reading data from standard (disk) file, not from sockets, pipes, etc.
- *
- * @param[in] ctx libyang context where to process the data model.
- * @param[in] fd File descriptor of a regular file (e.g. sockets are not supported) containing the schema
- *            in the specified format.
- * @param[in] format Format of the input data (YANG or YIN).
- * @param[in] main_ctx Parser context of the main module.
- * @param[in] custom_check Callback to check the parsed schema before it is accepted.
- * @param[in] check_data Caller's data to pass to the custom_check callback.
- * @return Pointer to the data model structure or NULL on error.
- */
-struct lysp_submodule *lys_parse_fd_submodule(struct ly_ctx *ctx, int fd, LYS_INFORMAT format, struct lys_parser_ctx *main_ctx,
-                                              lys_custom_check custom_check, void *check_data);
-
-/**
- * @brief Parse YANG module from a filepath.
- *
- * The modules are added into the context. The latest_revision flag is updated.
- *
- * \note Current implementation supports only reading data from standard (disk) file, not from sockets, pipes, etc.
- *
- * @param[in] ctx libyang context where to process the data model.
- * @param[in] path Path to the file with the model in the specified format.
- * @param[in] format Format of the input data (YANG or YIN).
- * @param[in] implement Flag if the schema is supposed to be marked as implemented.
- * @param[in] custom_check Callback to check the parsed schema before it is accepted.
- * @param[in] check_data Caller's data to pass to the custom_check callback.
- * @return Pointer to the data model structure or NULL on error.
- */
-struct lys_module *lys_parse_path_(struct ly_ctx *ctx, const char *path, LYS_INFORMAT format, int implement,
-                                   lys_custom_check custom_check, void *check_data);
+void lys_parser_fill_filepath(struct ly_ctx *ctx, struct ly_in *in, const char **filepath);
 
 /**
  * @brief Load the (sub)module into the context.

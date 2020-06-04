@@ -23,8 +23,8 @@
  */
 struct ly_in {
     LY_IN_TYPE type;     /**< type of the output to select the output method */
-    char *current;
-    char *start;
+    const char *current;
+    const char *start;
     size_t length;
     union {
         int fd;          /**< file descriptor for LY_IN_FD type */

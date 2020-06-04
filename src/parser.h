@@ -103,30 +103,36 @@ FILE *ly_in_file(struct ly_in *in, FILE *f);
 /**
  * @brief Create input handler using memory to read data.
  *
- * @param[in] str Pointer where to start reading data. The input data are expected to be NULL-terminated
+ * @param[in] str Pointer where to start reading data. The input data are expected to be NULL-terminated.
+ * Note that in case the destroy argument of ly_in_free() is used, the input string is passed to free(),
+ * so if it is really a static string, do not use the destroy argument!
  * @return NULL in case of error.
  * @return Created input handler supposed to be passed to different ly*_parse*() functions.
  */
-struct ly_in *ly_in_new_memory(char *str);
+struct ly_in *ly_in_new_memory(const char *str);
 
 /**
  * @brief Get or change memory where the data are read from.
  *
  * @param[in] in Input handler.
- * @param[in] str String containing the data to read.
+ * @param[in] str String containing the data to read. The input data are expected to be NULL-terminated.
+ * Note that in case the destroy argument of ly_in_free() is used, the input string is passed to free(),
+ * so if it is really a static string, do not use the destroy argument!
  * @return Previous starting address to read data from. Note that the caller is responsible to free
  * the data in case of changing string pointer @p str.
  */
-char *ly_in_memory(struct ly_in *in, char *str);
+const char *ly_in_memory(struct ly_in *in, const char *str);
 
 /**
  * @brief Create input handler file of the given filename.
  *
  * @param[in] filepath Path of the file where to read data.
+ * @param[in] len Optional number of bytes to use from @p filepath. If 0, the @p filepath is considered to be NULL-terminated and
+ * the whole string is taken into account.
  * @return NULL in case of error.
  * @return Created input handler supposed to be passed to different ly*_parse*() functions.
  */
-struct ly_in *ly_in_new_filepath(const char *filepath);
+struct ly_in *ly_in_new_filepath(const char *filepath, size_t len);
 
 /**
  * @brief Get or change the filepath of the file where the parser reads the data.
@@ -137,10 +143,12 @@ struct ly_in *ly_in_new_filepath(const char *filepath);
  *
  * @param[in] in Input handler.
  * @param[in] filepath Optional new filepath for the handler. If and only if NULL, the current filepath string is returned.
+ * @param[in] len Optional number of bytes to use from @p filepath. If 0, the @p filepath is considered to be NULL-terminated and
+ * the whole string is taken into account.
  * @return Previous filepath string in case the @p filepath argument is NULL.
  * @return NULL if changing filepath succeedes and ((void *)-1) otherwise.
  */
-const char *ly_in_filepath(struct ly_in *in, const char *filepath);
+const char *ly_in_filepath(struct ly_in *in, const char *filepath, size_t len);
 
 /**
  * @brief Generic reader getting up to @p count bytes from given input @p in into the buffer starting at @p buf.

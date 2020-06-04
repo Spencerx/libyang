@@ -26,6 +26,7 @@
 #include "context.h"
 #include "dict.h"
 #include "log.h"
+#include "parser.h"
 #include "plugins_exts.h"
 #include "plugins_types.h"
 #include "plugins_exts_internal.h"
@@ -919,13 +920,18 @@ lys_compile_import(struct lysc_ctx *ctx, struct lysp_import *imp_p, struct lysc_
     if (!imp->module->parsed) {
         /* try to use filepath if present */
         if (imp->module->filepath) {
-            mod = (struct lys_module*)lys_parse_path(ctx->ctx, imp->module->filepath,
-                                 !strcmp(&imp->module->filepath[strlen(imp->module->filepath - 4)], ".yin") ? LYS_IN_YIN : LYS_IN_YANG);
-            if (mod != imp->module) {
-                LOGERR(ctx->ctx, LY_EINT, "Filepath \"%s\" of the module \"%s\" does not match.",
-                       imp->module->filepath, imp->module->name);
-                mod = NULL;
+            struct ly_in *in;
+            in = ly_in_new_filepath(imp->module->filepath, 0);
+            if (in) {
+                mod = lys_parse(ctx->ctx, in, !strcmp(&imp->module->filepath[strlen(imp->module->filepath - 4)], ".yin") ? LYS_IN_YIN : LYS_IN_YANG);
+                if (mod != imp->module) {
+                    LOGERR(ctx->ctx, LY_EINT, "Filepath \"%s\" of the module \"%s\" does not match.", imp->module->filepath, imp->module->name);
+                    mod = NULL;
+                }
+            } else {
+                LOGINT(ctx->ctx);
             }
+            ly_in_free(in, 1);
         }
         if (!mod) {
             if (lysp_load_module(ctx->ctx, imp->module->name, imp->module->revision, 0, 1, &mod)) {
@@ -7253,7 +7259,7 @@ cleanup:
 }
 
 LY_ERR
-lys_compile(struct lys_module *mod, int options)
+lys_compile(struct lys_module **mod, int options)
 {
     struct lysc_ctx ctx = {0};
     struct lysc_module *mod_c;
@@ -7267,25 +7273,25 @@ lys_compile(struct lys_module *mod, int options)
     uint32_t i;
     LY_ERR ret = LY_SUCCESS;
 
-    LY_CHECK_ARG_RET(NULL, mod, mod->parsed, mod->ctx, LY_EINVAL);
+    LY_CHECK_ARG_RET(NULL, mod, *mod, (*mod)->parsed, (*mod)->ctx, LY_EINVAL);
 
-    if (!mod->implemented) {
+    if (!(*mod)->implemented) {
         /* just imported modules are not compiled */
         return LY_SUCCESS;
     }
 
-    sp = mod->parsed;
+    sp = (*mod)->parsed;
 
-    ctx.ctx = mod->ctx;
-    ctx.mod = mod;
-    ctx.mod_def = mod;
+    ctx.ctx = (*mod)->ctx;
+    ctx.mod = *mod;
+    ctx.mod_def = *mod;
     ctx.options = options;
     ctx.path_len = 1;
     ctx.path[0] = '/';
 
-    mod->compiled = mod_c = calloc(1, sizeof *mod_c);
-    LY_CHECK_ERR_RET(!mod_c, LOGMEM(mod->ctx), LY_EMEM);
-    mod_c->mod = mod;
+    (*mod)->compiled = mod_c = calloc(1, sizeof *mod_c);
+    LY_CHECK_ERR_RET(!mod_c, LOGMEM((*mod)->ctx), LY_EMEM);
+    mod_c->mod = *mod;
 
     COMPILE_ARRAY_GOTO(&ctx, sp->imports, mod_c->imports, u, lys_compile_import, ret, error);
     LY_ARRAY_FOR(sp->includes, u) {
@@ -7294,10 +7300,10 @@ lys_compile(struct lys_module *mod, int options)
     }
 
     /* features */
-    if (mod->off_features) {
+    if ((*mod)->off_features) {
         /* there is already precompiled array of features */
-        mod_c->features = mod->off_features;
-        mod->off_features = NULL;
+        mod_c->features = (*mod)->off_features;
+        (*mod)->off_features = NULL;
     } else {
         /* features are compiled directly into the compiled module structure,
          * but it must be done in two steps to allow forward references (via if-feature) between the features themselves */
@@ -7326,7 +7332,7 @@ lys_compile(struct lys_module *mod, int options)
     lysc_update_path(&ctx, NULL, "{identity}");
     COMPILE_ARRAY_UNIQUE_GOTO(&ctx, sp->identities, mod_c->identities, u, lys_compile_identity, ret, error);
     if (sp->identities) {
-        LY_CHECK_RET(lys_compile_identities_derived(&ctx, sp->identities, mod_c->identities));
+        LY_CHECK_GOTO(ret = lys_compile_identities_derived(&ctx, sp->identities, mod_c->identities), error);
     }
     lysc_update_path(&ctx, NULL, NULL);
 
@@ -7452,8 +7458,8 @@ lys_compile(struct lys_module *mod, int options)
 #endif
 
     /* add ietf-netconf-with-defaults "default" metadata to the compiled module */
-    if (!strcmp(mod->name, "ietf-netconf-with-defaults")) {
-        LY_CHECK_GOTO(ret = lys_compile_ietf_netconf_wd_annotation(&ctx, mod), error);
+    if (!strcmp((*mod)->name, "ietf-netconf-with-defaults")) {
+        LY_CHECK_GOTO(ret = lys_compile_ietf_netconf_wd_annotation(&ctx, *mod), error);
     }
 
     ly_set_erase(&ctx.dflts, free);
@@ -7463,8 +7469,8 @@ lys_compile(struct lys_module *mod, int options)
     LY_ARRAY_FREE(augments);
 
     if (ctx.options & LYSC_OPT_FREE_SP) {
-        lysp_module_free(mod->parsed);
-        ((struct lys_module*)mod)->parsed = NULL;
+        lysp_module_free((*mod)->parsed);
+        (*mod)->parsed = NULL;
     }
 
     if (!(ctx.options & LYSC_OPT_INTERNAL)) {
@@ -7477,18 +7483,18 @@ lys_compile(struct lys_module *mod, int options)
         }
     }
 
-    ((struct lys_module*)mod)->compiled = mod_c;
+    (*mod)->compiled = mod_c;
     return LY_SUCCESS;
 
 error:
-    lys_feature_precompile_revert(&ctx, mod);
+    lys_feature_precompile_revert(&ctx, *mod);
     ly_set_erase(&ctx.dflts, free);
     ly_set_erase(&ctx.unres, NULL);
     ly_set_erase(&ctx.groupings, NULL);
     ly_set_erase(&ctx.tpdf_chain, NULL);
     LY_ARRAY_FREE(augments);
     lysc_module_free(mod_c, NULL);
-    mod->compiled = NULL;
+    (*mod)->compiled = NULL;
 
     /* revert compilation of modules implemented by dependency */
     for (i = 0; i < ctx.ctx->list.count; ++i) {
@@ -7503,6 +7509,11 @@ error:
             m->compiled = NULL;
         }
     }
+
+    /* remove the module itself from the context and free it */
+    ly_set_rm(&ctx.ctx->list, *mod, NULL);
+    lys_module_free(*mod, NULL);
+    *mod = NULL;
 
     return ret;
 }

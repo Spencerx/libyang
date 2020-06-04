@@ -182,13 +182,13 @@ test_input_filepath(void **state)
 
     *state = test_input_filepath;
 
-    assert_ptr_equal(NULL, ly_in_new_filepath(NULL));
-    assert_ptr_equal(((void *)-1), ly_in_filepath(NULL, NULL));
+    assert_ptr_equal(NULL, ly_in_new_filepath(NULL, 0));
+    assert_ptr_equal(((void *)-1), ly_in_filepath(NULL, NULL, 0));
 
-    assert_non_null(in = ly_in_new_filepath(path1));
+    assert_non_null(in = ly_in_new_filepath(path1, 0));
     assert_int_equal(LY_IN_FILEPATH, ly_in_type(in));
-    assert_ptr_equal(NULL, ly_in_filepath(in, path2));
-    assert_string_equal(path2, ly_in_filepath(in, NULL));
+    assert_ptr_equal(NULL, ly_in_filepath(in, path2, 0));
+    assert_string_equal(path2, ly_in_filepath(in, NULL, 0));
     ly_in_free(in, 0);
 
     /* cleanup */

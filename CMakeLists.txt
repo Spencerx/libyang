@@ -252,6 +252,7 @@ set(headers
     src/dict.h
     src/log.h
     src/parser.h
+    src/parser_schema.h
     src/plugins_exts.h
     src/plugins_types.h
     src/printer.h
